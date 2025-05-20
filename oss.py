@@ -1,3 +1,6 @@
+# 맛집 지도 대시보드 (대구/광주)
+# 주요 기능: 도시별 데이터 로드, 지도 시각화, 카테고리/시간 필터, 상세정보, 파이차트, 지도 표시 개수 슬라이더
+
 import streamlit as st
 import pandas as pd
 import folium
@@ -8,7 +11,7 @@ import os
 import plotly.express as px
 from dotenv import load_dotenv
 
-# 현재 파일(oss.py) 위치 기준으로 data 폴더 경로 설정
+# --- 경로 및 환경설정 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 
@@ -24,15 +27,14 @@ CITY_FILES = {
     }
 }
 
-# .env 파일 로드
+# .env 파일 로드 및 API 키 가져오기
 load_dotenv()
-
-# 환경 변수에서 API 키 가져오기
 NAVER_CLIENT_ID = os.getenv('NAVER_CLIENT_ID')
 NAVER_CLIENT_SECRET = os.getenv('NAVER_CLIENT_SECRET')
 
-# 네이버 지도 Geocoding API 함수 (UI에는 노출하지 않음)
+# --- 네이버 지도 Geocoding API 함수 ---
 def naver_geocode(address, client_id, client_secret):
+    """도로명 주소를 위도/경도로 변환"""
     url = 'https://maps.apigw.ntruss.com/map-geocode/v2/geocode'
     headers = {
         'X-NCP-APIGW-API-KEY-ID': client_id,
@@ -48,7 +50,9 @@ def naver_geocode(address, client_id, client_secret):
             return lat, lon
     return None, None
 
+# --- 데이터프레임에 좌표 변환 후 저장 ---
 def geocode_and_save(df, client_id, client_secret, save_path):
+    """데이터프레임의 주소를 위경도로 변환 후 CSV로 저장"""
     latitudes = []
     longitudes = []
     for i, address in enumerate(df['GNG_CS']):
@@ -62,8 +66,9 @@ def geocode_and_save(df, client_id, client_secret, save_path):
     df.to_csv(save_path, index=False)
     return df
 
-# 도시별 데이터 로드 함수
+# --- 도시별 데이터 로드 함수 ---
 def load_city_data(city):
+    """도시별로 좌표 변환된 CSV 또는 원본 JSON을 불러옴"""
     if city not in CITY_FILES:
         st.warning("해당 도시 데이터가 준비되지 않았습니다.")
         return pd.DataFrame()
@@ -97,8 +102,9 @@ def load_city_data(city):
         st.error("도시 데이터 파일이 없습니다.")
         return pd.DataFrame()
 
-# 지도 생성 함수
+# --- folium 지도 생성 함수 ---
 def create_map(df, map_info, color_dict):
+    """음식점 데이터프레임을 folium 지도에 마커로 표시"""
     m = folium.Map(
         location=[df['위도'].mean(), df['경도'].mean()],
         zoom_start=12,
@@ -117,11 +123,11 @@ def create_map(df, map_info, color_dict):
             ).add_to(m)
     return m
 
-# 메인 함수
+# --- 메인 Streamlit 앱 ---
 def main():
     st.title('맛집 지도 대시보드')
 
-    # --- 사이드바 ---
+    # --- 사이드바: 도시 선택 ---
     with st.sidebar:
         st.write('### 도시 선택')
         city_option = st.selectbox('도시를 선택하세요', ['전체', '대구', '광주'], index=1)
@@ -138,6 +144,7 @@ def main():
     # --- 날짜/시간 선택 ---
     selected_date = st.date_input('날짜를 선택하세요')
     selected_time = st.time_input('시간을 선택하세요')
+    # 영업 시간 필터링
     if 'MBZ_HR' in df.columns:
         selected_datetime = pd.to_datetime(f"{selected_date} {selected_time}")
         def parse_hours(row):
@@ -178,11 +185,24 @@ def main():
     else:
         display_foods = selected_foods
 
+    # --- 마커 색상 매핑 ---
     color_map = ['red', 'blue', 'green', 'purple', 'orange', 'darkred', 'lightred', 'beige', 'darkblue', 'darkgreen', 'cadetblue', 'darkpurple', 'white', 'pink', 'lightblue', 'lightgreen', 'gray', 'black', 'lightgray']
     color_dict = {ft: color_map[i % len(color_map)] for i, ft in enumerate(display_foods)}
 
-    if display_foods and df[df['FD_CS'].isin(display_foods)].shape[0] > 0:
-        m = create_map(df[df['FD_CS'].isin(display_foods)], map_info, color_dict)
+    # --- 지도 및 음식점 표시 ---
+    filtered_df = df[df['FD_CS'].isin(display_foods)] if display_foods else df.iloc[0:0]
+
+    # 지도에 표시할 음식점 수 슬라이더 
+    st.markdown('---')
+    max_count = len(filtered_df)
+    if max_count > 0:
+        max_display = st.slider('지도에 표시할 최대 음식점 수', min_value=1, max_value=max_count, value=min(100, max_count), step=1)
+        filtered_df = filtered_df.head(max_display)
+    else:
+        max_display = 0
+
+    if max_display > 0:
+        m = create_map(filtered_df, map_info, color_dict)
         folium_static(m, width=800, height=600)
     else:
         st.warning('지도에 표시할 데이터가 없습니다. (카테고리/필터를 확인하세요)')
