@@ -200,6 +200,7 @@ def main():
         m = create_map(filtered_df, map_info, color_dict)
         folium_static(m, width=800, height=600)
     elif max_count == 1:
+        # 슬라이더 없이 1개만 바로 지도에 표시 (StreamlitAPIException 방지)
         m = create_map(filtered_df, map_info, color_dict)
         folium_static(m, width=800, height=600)
     else:
