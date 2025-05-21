@@ -192,16 +192,12 @@ def main():
     # --- 지도 및 음식점 표시 ---
     filtered_df = df[df['FD_CS'].isin(display_foods)] if display_foods else df.iloc[0:0]
 
-    # 지도에 표시할 음식점 수 슬라이더 
+    # 지도에 표시할 음식점 수 슬라이더 (max_count > 0일 때만 생성)
     st.markdown('---')
     max_count = len(filtered_df)
     if max_count > 0:
         max_display = st.slider('지도에 표시할 최대 음식점 수', min_value=1, max_value=max_count, value=min(100, max_count), step=1)
         filtered_df = filtered_df.head(max_display)
-    else:
-        max_display = 0
-
-    if max_display > 0:
         m = create_map(filtered_df, map_info, color_dict)
         folium_static(m, width=800, height=600)
     else:
